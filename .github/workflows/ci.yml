@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, "lts/**"]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm test
+
+  # The image as it ships: the real ZAP and Nuclei, run by the agent's own code, against a small site on the runner.
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: docker build -t dast-agent .
+      - run: docker run --rm dast-agent sh -c 'node --version && nuclei -version && /zap/zap.sh -cmd -silent -version && test -d /opt/nuclei-templates/http'
+      - name: A site to scan
+        run: |
+          mkdir site && printf '<html><body><a href="/about.html">about</a><form action="/search"><input name="q"></form></body></html>' > site/index.html
+          printf '<html><body>about</body></html>' > site/about.html
+          (cd site && python3 -m http.server 8000 >/dev/null 2>&1 &)
+          sleep 1 && curl -sf http://127.0.0.1:8000/ > /dev/null
+      - name: ZAP and Nuclei through the agent's code
+        run: |
+          docker run --rm --network host --read-only --tmpfs /tmp:size=1g dast-agent node --input-type=module -e '
+          import { checkJob, runZap, runNuclei } from "/app/agent/jobs.ts";
+          const o = { workDir: "/tmp", zap: "/zap/zap.sh", nuclei: "/usr/local/bin/nuclei", templates: "/opt/nuclei-templates/http/exposures", zapMemoryMb: 1024, timeoutMs: 15 * 60_000 };
+          const job = (profile) => checkJob({ id: "ci", kind: "scan", target: { name: "site", url: "http://127.0.0.1:8000", production: false }, profile });
+          const zap = await runZap(job("passive"), o);
+          const sarif = JSON.parse(zap.sarif);
+          if (sarif.version !== "2.1.0" || !sarif.runs?.[0]?.tool) throw new Error("ZAP wrote no SARIF");
+          console.log("ZAP passive:", zap.results, "results from", sarif.runs[0].tool.driver.name);
+          const nuclei = await runNuclei(job("standard"), o);
+          console.log("Nuclei standard:", nuclei.results, "results");
+          '
