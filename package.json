@@ -1,6 +1,6 @@
 {
   "name": "@openasy/dast-agent",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "description": "OpenAsy DAST agent: runs ZAP and Nuclei inside your network, only against targets proven to be yours, and sends the findings to dast.",
   "license": "AGPL-3.0-only",
