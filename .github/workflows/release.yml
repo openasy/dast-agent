@@ -117,10 +117,11 @@ jobs:
 
       # ZAP, Java and a browser make an SBOM larger than the public transparency log takes. The attestation is signed
       # the same way but kept out of the log, with a signed timestamp in its place; the signature and the provenance
-      # are in the log as for every image (ADR 0027).
+      # are in the log as for every image (ADR 0027). cosign's signing config refuses a timestamp server given here, so
+      # it is left out.
       - name: Attach the SBOM as a signed attestation
         run: >-
-          cosign attest --yes --type spdxjson --predicate sbom.spdx.json
+          cosign attest --yes --type spdxjson --predicate sbom.spdx.json --use-signing-config=false
           --tlog-upload=false --timestamp-server-url https://timestamp.sigstore.dev/api/v1/timestamp
           "${IMAGE}@${{ steps.build.outputs.digest }}"
 
