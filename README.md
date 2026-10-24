@@ -48,7 +48,7 @@ docker run -d --name dast-agent --restart unless-stopped --read-only --tmpfs /tm
   --cap-drop ALL --security-opt no-new-privileges --memory 3g \
   -v dast-agent-data:/data -v "$PWD/openasy-agent-kek:/run/secrets/openasy-agent-kek:ro" \
   -e DAST_URL=https://dast.example.com -e DAST_ENROLL_TOKEN=ode_... \
-  ghcr.io/openasy/dast-agent:0.5.0
+  ghcr.io/openasy/dast-agent:0.6.0
 ```
 
 The image is about 2 GB: ZAP, Java and a headless browser. A scan uses up to `ZAP_MEMORY_MB` for ZAP's heap plus about
