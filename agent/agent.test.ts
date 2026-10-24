@@ -35,7 +35,7 @@ function fakeEngines() {
     dir,
     "zap.sh",
     `const a = process.argv.slice(2), plan = JSON.parse(fs.readFileSync(a[a.indexOf("-autorun") + 1], "utf8"));
-fs.writeFileSync(${JSON.stringify(join(dir, "zap.json"))}, JSON.stringify({ args: a, plan, home: process.env.HOME, jvm: fs.readFileSync(path.join(a[a.indexOf("-dir") + 1], ".ZAP_JVM.properties"), "utf8") }));
+fs.writeFileSync(${JSON.stringify(join(dir, "zap.json"))}, JSON.stringify({ args: a, plan, home: process.env.HOME, header: [process.env.ZAP_AUTH_HEADER, process.env.ZAP_AUTH_HEADER_VALUE, process.env.ZAP_AUTH_HEADER_SITE], planMode: (fs.statSync(a[a.indexOf("-autorun") + 1]).mode & 0o777).toString(8), jvm: fs.readFileSync(path.join(a[a.indexOf("-dir") + 1], ".ZAP_JVM.properties"), "utf8") }));
 const report = plan.jobs.find((j) => j.type === "report").parameters;
 fs.writeFileSync(path.join(report.reportDir, report.reportFile + ".json"), ${JSON.stringify(SARIF("ZAP", 2))});`,
   );
@@ -43,7 +43,7 @@ fs.writeFileSync(path.join(report.reportDir, report.reportFile + ".json"), ${JSO
     dir,
     "nuclei",
     `const a = process.argv.slice(2);
-fs.writeFileSync(${JSON.stringify(join(dir, "nuclei.json"))}, JSON.stringify({ args: a, home: process.env.HOME }));
+fs.writeFileSync(${JSON.stringify(join(dir, "nuclei.json"))}, JSON.stringify({ args: a, home: process.env.HOME, secrets: a.includes("-secret-file") ? fs.readFileSync(a[a.indexOf("-secret-file") + 1], "utf8") : null }));
 if (fs.existsSync(${JSON.stringify(join(dir, "nuclei-fails"))})) { console.error("[FTL] Could not run nuclei: no templates"); process.exit(1) }
 if (!fs.existsSync(${JSON.stringify(join(dir, "nuclei-finds-nothing"))})) fs.writeFileSync(a[a.indexOf("-sarif-export") + 1], ${JSON.stringify(SARIF("Nuclei", 1))});`,
   );
@@ -85,6 +85,56 @@ describe("jobs from dast", () => {
     expect(standard[standard.indexOf("-exclude-tags") + 1]).toContain("intrusive");
     const full = nucleiArgs(checkJob(job({ profile: "full" })), options, "/o.sarif");
     expect(full[full.indexOf("-exclude-tags") + 1]).toBe("dos");
+  });
+});
+
+describe("logins", () => {
+  const form = {
+    kind: "form",
+    loginUrl: "https://shop.example.com/login",
+    usernameField: "email",
+    passwordField: "password",
+    username: "scan@example.com",
+    password: "hunter22",
+    loggedInRegex: "Sign out",
+  };
+  const header = { kind: "header", headerName: "Authorization", value: "Bearer t0ken" };
+
+  it.each([
+    ["a form login sent to another origin", { ...form, loginUrl: "https://evil.example.com/login" }],
+    ["a header value on two lines", { ...header, value: "a\r\nX-Evil: 1" }],
+    ["a field name a form would not have", { ...form, usernameField: "a&b=c" }],
+  ])("refuses %s", (_, auth) => {
+    expect(() => checkJob(job({ auth }))).toThrow();
+  });
+
+  it("signs ZAP in with a form login, as one user, away from sign-out links", () => {
+    const plan = zapPlan(checkJob(job({ profile: "full", auth: form })), "/r");
+    expect(plan.env.contexts[0]).toMatchObject({
+      authentication: {
+        method: "form",
+        parameters: { loginPageUrl: form.loginUrl, loginRequestBody: "email={%username%}&password={%password%}" },
+        verification: { method: "response", loggedInRegex: "Sign out" },
+      },
+      users: [{ name: "scan", credentials: { username: "scan@example.com", password: "hunter22" } }],
+      excludePaths: [expect.stringContaining("sign-?out")],
+    });
+    for (const j of plan.jobs.filter((j) => ["spider", "spiderAjax", "activeScan"].includes(j.type))) expect(j.parameters).toMatchObject({ user: "scan" });
+  });
+
+  it("gives a header login to ZAP through its environment and to Nuclei in a secrets file for the target's host", async () => {
+    await runZap(checkJob(job({ auth: header })), options);
+    expect(fake.read("zap").header).toEqual(["Authorization", "Bearer t0ken", "shop.example.com"]);
+    await runZap(checkJob(job({ auth: form })), options);
+    expect(fake.read("zap")).toMatchObject({ header: [null, null, null], planMode: "600" });
+    await runNuclei(checkJob(job({ auth: header })), options);
+    expect(JSON.parse(fake.read("nuclei").secrets)).toEqual({
+      static: [{ type: "header", domains: ["shop.example.com"], headers: [{ key: "Authorization", value: "Bearer t0ken" }] }],
+    });
+    // Nuclei cannot fill in a form: it runs signed out.
+    await runNuclei(checkJob(job({ auth: form })), options);
+    expect(fake.read("nuclei").secrets).toBeNull();
+    expect(readdirSync(options.workDir)).toEqual([]);
   });
 });
 

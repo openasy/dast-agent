@@ -28,6 +28,13 @@ each engine's findings back as SARIF (ADR 0037). dast holds no scanner.
 | `standard` | Crawls for 10 minutes, then the active rules at low strength, 30 minutes at most | HTTP and TLS templates of low severity and up, without intrusive, fuzzing, brute force or denial of service templates |
 | `full` | Crawls for 20 minutes, also with a headless browser, then the active rules at medium strength, 90 minutes at most | Every HTTP and TLS template of low severity and up, except denial of service |
 
+A scan can sign in with one of the target's logins from dast. A **header** login, such as `Authorization: Bearer ...`,
+is added by ZAP to every request to the target's host and given to Nuclei in a secrets file for that host only. A
+**form** login is filled in by ZAP, which then scans as that user and keeps away from sign-out links; Nuclei cannot fill
+in a form and runs signed out. The form must be sent to the target's own origin, the secret reaches ZAP and Nuclei only
+through their environment and a file readable by the agent alone, deleted after the scan, and it is scrubbed from any
+error the agent reports. Use an account made for scanning, with test data only.
+
 Each engine's report is kept per profile in dast, such as `zap-standard`, so a passive scan never marks what an active
 one found as fixed.
 
