@@ -115,8 +115,14 @@ jobs:
           output-file: sbom.spdx.json
           upload-release-assets: false
 
+      # ZAP, Java and a browser make an SBOM larger than the public transparency log takes. The attestation is signed
+      # the same way but kept out of the log, with a signed timestamp in its place; the signature and the provenance
+      # are in the log as for every image (ADR 0027).
       - name: Attach the SBOM as a signed attestation
-        run: cosign attest --yes --type spdxjson --predicate sbom.spdx.json "${IMAGE}@${{ steps.build.outputs.digest }}"
+        run: >-
+          cosign attest --yes --type spdxjson --predicate sbom.spdx.json
+          --tlog-upload=false --timestamp-server-url https://timestamp.sigstore.dev/api/v1/timestamp
+          "${IMAGE}@${{ steps.build.outputs.digest }}"
 
   provenance:
     needs: image
@@ -146,6 +152,11 @@ jobs:
             ```bash
             docker pull ${{ env.IMAGE }}:${{ github.ref_name }}
             cosign verify ${{ env.IMAGE }}@${{ needs.image.outputs.digest }} \
+              --certificate-identity-regexp '^https://github.com/openasy/dast-agent/' \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com
+            # The SBOM attestation has a signed timestamp in place of a transparency log entry:
+            cosign verify-attestation --type spdxjson --insecure-ignore-tlog --use-signed-timestamps \
+              ${{ env.IMAGE }}@${{ needs.image.outputs.digest }} \
               --certificate-identity-regexp '^https://github.com/openasy/dast-agent/' \
               --certificate-oidc-issuer https://token.actions.githubusercontent.com
             ```

@@ -61,7 +61,10 @@ The image is about 2 GB: ZAP, Java and a headless browser. A scan uses up to `ZA
 ## Versions
 
 ZAP 2.17.0 (its image, pinned by digest), Nuclei 3.11.1 (checked against its published checksum) and the Nuclei
-templates of their v10.5.0 release, pinned by commit (ADR 0027). Dependabot proposes new versions; CI scans a small
+templates of their v10.5.0 release, pinned by commit (ADR 0027). The image is signed and has SLSA provenance in the
+public transparency log like every OpenAsy image; its SBOM is too large for that log, so the SBOM attestation carries a
+signed timestamp instead and is verified with `cosign verify-attestation --type spdxjson --insecure-ignore-tlog
+--use-signed-timestamps`, as the release notes show. Dependabot proposes new versions; CI scans a small
 site with each before it ships.
 
 ## Develop
