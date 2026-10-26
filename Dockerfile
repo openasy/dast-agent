@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends unzip && rm -rf
 COPY --from=nuclei-zip /nuclei.zip /nuclei.zip
 RUN unzip /nuclei.zip nuclei -d /out
 
-FROM node:26.12.0-trixie-slim AS node
+FROM node:26.12.1-trixie-slim AS node
 
 # ZAP's own image, pinned by digest: ZAP, Java and the headless browser its AJAX spider drives. Node runs the agent's
 # TypeScript sources directly; it has no runtime dependencies.
