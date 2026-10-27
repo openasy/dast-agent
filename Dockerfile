@@ -18,7 +18,7 @@ FROM node:26.12.0-trixie-slim AS node
 
 # ZAP's own image, pinned by digest: ZAP, Java and the headless browser its AJAX spider drives. Node runs the agent's
 # TypeScript sources directly; it has no runtime dependencies.
-FROM ghcr.io/zaproxy/zaproxy:2.17.0@sha256:5ccfff9a411743ab2615136a2edd7416bec9ce41572fa94e935df38c14adb2b6
+FROM ghcr.io/zaproxy/zaproxy:2.17.0@sha256:030d3df57735dacbb83464854758e674dd9ad01d79d12a129a8e58b1fd384238
 USER root
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=nuclei /out/nuclei /usr/local/bin/nuclei
